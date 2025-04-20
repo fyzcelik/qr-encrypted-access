@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:cryptography/cryptography.dart';
 
 class QrDecryptPage extends StatefulWidget {
   @override
@@ -10,14 +11,40 @@ class QrDecryptPage extends StatefulWidget {
 
 class _QrDecryptPageState extends State<QrDecryptPage> {
   String? qrData;
-  String studentId = '';
   String resultMessage = '';
   bool isLoading = false;
+  final TextEditingController studentIdController = TextEditingController();
+  Map<String, String> allowedStudentIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    loadStudentIds();
+  }
+
+  Future<void> loadStudentIds() async {
+    final jsonString = await rootBundle.loadString('assets/student_ids.json');
+    final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
+    setState(() {
+      allowedStudentIds =
+          jsonMap.map((key, value) => MapEntry(key, value.toString()));
+    });
+  }
 
   Future<void> decryptQrCode() async {
+    final studentId = studentIdController.text.trim();
+
     if (qrData == null || studentId.isEmpty) {
       setState(() {
         resultMessage = 'Lütfen QR kodu okutun ve okul numarasını girin.';
+      });
+      return;
+    }
+
+    final schoolName = allowedStudentIds[studentId];
+    if (schoolName == null) {
+      setState(() {
+        resultMessage = 'Bu öğrenci numarasına ait kayıt bulunamadı.';
       });
       return;
     }
@@ -28,25 +55,20 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/decrypt'), // Android için
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'data': qrData, 'student_id': studentId}),
+      final secretKey = SecretKey(utf8.encode(schoolName));
+      final encrypter = AesGcm.with256bits();
+      final cipherBytes = base64.decode(qrData!);
+      final decrypted = await encrypter.decrypt(
+        SecretBox(cipherBytes, nonce: [], mac: Mac.empty),
+        secretKey: secretKey,
       );
 
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        setState(() {
-          resultMessage = '📩 Mesaj: ${json['message']}';
-        });
-      } else {
-        setState(() {
-          resultMessage = '❌ Hata: ${response.body}';
-        });
-      }
+      setState(() {
+        resultMessage = '📩 Mesaj: ${utf8.decode(decrypted)}';
+      });
     } catch (e) {
       setState(() {
-        resultMessage = '🔌 Ağ hatası: $e';
+        resultMessage = '❌ Şifre çözme hatası: $e';
       });
     } finally {
       setState(() => isLoading = false);
@@ -67,31 +89,37 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
       body: Column(
         children: [
           Expanded(
-              flex: 2,
-              child: MobileScanner(
-                onDetect: (BarcodeCapture barcodeCapture) {
-                  final List<Barcode> barcodes = barcodeCapture.barcodes;
-                  if (barcodes.isNotEmpty) {
-                    final String code = barcodes.first.rawValue ?? '';
-                    if (code.isNotEmpty) {
-                      onQrScanned(code);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("✅ QR Kod Okundu")),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("❌ QR Kod Okunamadı")),
-                      );
-                    }
+            flex: 2,
+            child: MobileScanner(
+              onDetect: (BarcodeCapture barcodeCapture) {
+                final List<Barcode> barcodes = barcodeCapture.barcodes;
+                if (barcodes.isNotEmpty) {
+                  final String code = barcodes.first.rawValue ?? '';
+                  if (code.isNotEmpty) {
+                    onQrScanned(code);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("✅ QR Kod Okundu")),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                    );
                   }
-                },
-              )),
+                }
+              },
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
+                Text(
+                  'Okul Numarası',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 12),
                 TextField(
-                  onChanged: (value) => studentId = value,
+                  controller: studentIdController,
                   decoration: InputDecoration(
                     labelText: 'Okul Numarası',
                     border: OutlineInputBorder(),

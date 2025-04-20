@@ -1,10 +1,11 @@
 import cv2
 import hashlib
 import base64
+import json
 from cryptography.fernet import Fernet
 
-def create_key_from_id(student_id):
-    hash = hashlib.sha256(student_id.encode()).digest()
+def create_key_from_school_name(school_name):
+    hash = hashlib.sha256(school_name.encode()).digest()
     key = base64.urlsafe_b64encode(hash)
     return Fernet(key)
 
@@ -20,13 +21,22 @@ if __name__ == "__main__":
     qr_dosya = input("QR kod dosya adını girin: ")
     okul_no = input("Okul numaranızı girin: ")
 
+    # Load student ID to school mapping
+    with open("student_ids.json", "r") as f:
+        student_map = json.load(f)
+
+    school_name = student_map.get(okul_no)
+    if not school_name:
+        print("Bu öğrenci numarasına ait kayıt bulunamadı.")
+        exit()
+
     encrypted_data = read_qr(qr_dosya)
     if encrypted_data:
         try:
-            cipher = create_key_from_id(okul_no)
+            cipher = create_key_from_school_name(school_name)
             decrypted = cipher.decrypt(encrypted_data).decode()
             print(f"Mesaj başarıyla çözüldü: {decrypted}")
         except Exception as e:
-            print("Mesaj çözülemedi. Okul numarası yanlış olabilir.")
+            print("Mesaj çözülemedi. Okul numarası veya şifre yanlış olabilir.")
     else:
         print("QR koddan veri alınamadı.")

@@ -4,14 +4,22 @@ import cv2
 import numpy as np
 from PIL import Image
 from cryptography.fernet import Fernet
+import json
 
-def create_key_from_id(student_id):
-    hash = hashlib.sha256(student_id.encode()).digest()
+def create_key_from_school_name(school_name):
+    hash = hashlib.sha256(school_name.encode()).digest()
     key = base64.urlsafe_b64encode(hash)
     return Fernet(key)
 
 def encrypt_message_with_id(message, student_id):
-    cipher = create_key_from_id(student_id)
+    with open("student_ids.json", "r") as f:
+        student_map = json.load(f)
+
+    school_name = student_map.get(student_id)
+    if not school_name:
+        raise ValueError("Bu öğrenci numarasına ait okul bilgisi bulunamadı.")
+
+    cipher = create_key_from_school_name(school_name)
     encrypted = cipher.encrypt(message.encode())
     return encrypted
 

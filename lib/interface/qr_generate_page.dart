@@ -10,13 +10,27 @@ class QrGeneratePage extends StatefulWidget {
 
 class _QrGeneratePageState extends State<QrGeneratePage> {
   final TextEditingController messageController = TextEditingController();
+  final TextEditingController studentIdController = TextEditingController();
   String? qrCodeData;
   bool isGenerating = false;
+  Map<String, String> allowedStudentIds =
+      {}; // Assuming this is populated from JSON
 
   Future<void> generateQrCode() async {
-    if (messageController.text.isEmpty) {
+    final message = messageController.text.trim();
+    final studentId = studentIdController.text.trim();
+
+    if (message.isEmpty || studentId.isEmpty) {
       setState(() {
-        qrCodeData = 'Lütfen bir mesaj girin.';
+        qrCodeData = 'Lütfen öğrenci numarası ve mesaj girin.';
+      });
+      return;
+    }
+
+    final schoolName = allowedStudentIds[studentId];
+    if (schoolName == null) {
+      setState(() {
+        qrCodeData = 'Bu öğrenci numarasına ait erişim izni bulunmamaktadır.';
       });
       return;
     }
@@ -27,10 +41,11 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
     });
 
     try {
-      final secretKey = SecretKey(utf8.encode('mySecretKey1234'));
+      // Use a key based on the school name
+      final secretKey = SecretKey(utf8.encode(schoolName));
       final encrypter = AesGcm.with256bits();
       final cipherText = await encrypter.encrypt(
-        utf8.encode(messageController.text),
+        utf8.encode(message),
         secretKey: secretKey,
       );
 
@@ -43,7 +58,9 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
         qrCodeData = 'Şifreleme hatası: $e';
       });
     } finally {
-      setState(() => isGenerating = false);
+      if (mounted) {
+        setState(() => isGenerating = false);
+      }
     }
   }
 
@@ -55,6 +72,14 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            TextField(
+              controller: studentIdController,
+              decoration: InputDecoration(
+                labelText: 'Öğrenci Numarası',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 12),
             TextField(
               controller: messageController,
               decoration: InputDecoration(
