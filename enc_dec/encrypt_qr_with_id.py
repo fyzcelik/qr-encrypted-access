@@ -1,6 +1,8 @@
-import qrcode
 import hashlib
 import base64
+import cv2
+import numpy as np
+from PIL import Image
 from cryptography.fernet import Fernet
 
 def create_key_from_id(student_id):
@@ -14,8 +16,18 @@ def encrypt_message_with_id(message, student_id):
     return encrypted
 
 def generate_qr(data, filename="gizli_qr.png"):
-    qr = qrcode.make(data.decode())
-    qr.save(filename)
+    import qrcode
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(data.decode())
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(filename)
     print(f"[+] QR kod oluşturuldu: {filename}")
 
 if __name__ == "__main__":

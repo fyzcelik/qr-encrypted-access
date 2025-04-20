@@ -1,6 +1,5 @@
 from fastapi import FastAPI, File, Form, UploadFile
 import cv2
-from pyzbar.pyzbar import decode
 import hashlib
 import base64
 from cryptography.fernet import Fernet
@@ -14,9 +13,10 @@ def create_key_from_id(student_id: str):
 
 def extract_encrypted_message_from_qr(file_path: str):
     img = cv2.imread(file_path)
-    decoded = decode(img)
-    if decoded:
-        return decoded[0].data
+    detector = cv2.QRCodeDetector()
+    data, bbox, _ = detector.detectAndDecode(img)
+    if data:
+        return data.encode()  # Fernet expects bytes
     return None
 
 @app.post("/decrypt_qr/")
