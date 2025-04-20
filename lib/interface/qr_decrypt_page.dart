@@ -67,19 +67,25 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
       body: Column(
         children: [
           Expanded(
-            flex: 2,
-            child: MobileScanner(
-              onDetect: (barcode, args) {
-                final code = barcode.rawValue;
-                if (code != null) {
-                  onQrScanned(code);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("✅ QR Kod Okundu")),
-                  );
-                }
-              },
-            ),
-          ),
+              flex: 2,
+              child: MobileScanner(
+                onDetect: (BarcodeCapture barcodeCapture) {
+                  final List<Barcode> barcodes = barcodeCapture.barcodes;
+                  if (barcodes.isNotEmpty) {
+                    final String code = barcodes.first.rawValue ?? '';
+                    if (code.isNotEmpty) {
+                      onQrScanned(code);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("✅ QR Kod Okundu")),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                      );
+                    }
+                  }
+                },
+              )),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(

@@ -13,7 +13,7 @@ def read_qr(filename):
     detector = cv2.QRCodeDetector()
     data, bbox, _ = detector.detectAndDecode(img)
     if data:
-        return data.encode()  # Fernet expects bytes
+        return data.encode() 
     return None
 
 if __name__ == "__main__":

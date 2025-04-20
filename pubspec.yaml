@@ -1,5 +1,15 @@
+name: qr_encrypted_access
+description: A new Flutter project
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
 dependencies:
   flutter:
     sdk: flutter
   mobile_scanner: ^3.3.0
-  http: ^0.14.0
+  http: ^1.3.0
+  cryptography: ^2.7.0
+  qr_flutter: ^4.1.0
+  flutter_test:
+    sdk: flutter
