@@ -14,3 +14,7 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_test:
     sdk: flutter
+
+flutter:
+  assets:
+    - assets/student_ids.json
