@@ -14,6 +14,7 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
   String? qrData;
   String resultMessage = '';
   bool isLoading = false;
+  bool isQrScanned = false;
   final TextEditingController studentIdController = TextEditingController();
   Map<String, String> allowedStudentIds = {};
 
@@ -84,70 +85,76 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
   }
 
   void onQrScanned(String? value) {
-    if (value == null) return;
+    if (value == null || isQrScanned) return;
     setState(() {
       qrData = value;
+      isQrScanned = true;
     });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("✅ QR Kod Okundu")),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("QR Şifre Çözme")),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 2,
-            child: MobileScanner(
-              onDetect: (BarcodeCapture barcodeCapture) {
-                final List<Barcode> barcodes = barcodeCapture.barcodes;
-                if (barcodes.isNotEmpty) {
-                  final String code = barcodes.first.rawValue ?? '';
-                  if (code.isNotEmpty) {
-                    onQrScanned(code);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("✅ QR Kod Okundu")),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("❌ QR Kod Okunamadı")),
-                    );
-                  }
-                }
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                Text(
-                  'Okul Numarası',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            if (!isQrScanned)
+              SizedBox(
+                height: 300,
+                child: MobileScanner(
+                  onDetect: (BarcodeCapture barcodeCapture) {
+                    final List<Barcode> barcodes = barcodeCapture.barcodes;
+                    if (barcodes.isNotEmpty) {
+                      final String code = barcodes.first.rawValue ?? '';
+                      if (code.isNotEmpty) {
+                        onQrScanned(code);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                        );
+                      }
+                    }
+                  },
                 ),
-                SizedBox(height: 12),
-                TextField(
-                  controller: studentIdController,
-                  decoration: InputDecoration(
-                    labelText: 'Okul Numarası',
-                    border: OutlineInputBorder(),
-                  ),
+              ),
+            if (isQrScanned)
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Text(
+                      'Okul Numarası',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 12),
+                    TextField(
+                      controller: studentIdController,
+                      decoration: InputDecoration(
+                        labelText: 'Okul Numarası',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: isLoading ? null : decryptQrCode,
+                      child: Text("📥 Mesajı Getir"),
+                    ),
+                    SizedBox(height: 12),
+                    if (resultMessage.isNotEmpty)
+                      Text(
+                        resultMessage,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                  ],
                 ),
-                SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: isLoading ? null : decryptQrCode,
-                  child: Text("📥 Mesajı Getir"),
-                ),
-                SizedBox(height: 12),
-                if (resultMessage.isNotEmpty)
-                  Text(
-                    resultMessage,
-                    style: TextStyle(fontSize: 16),
-                  ),
-              ],
-            ),
-          )
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }

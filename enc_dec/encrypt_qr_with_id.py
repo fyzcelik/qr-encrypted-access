@@ -1,15 +1,13 @@
 import hashlib
 import base64
-import cv2
-import numpy as np
-from PIL import Image
-from cryptography.fernet import Fernet
 import json
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
+import qrcode
 
-def create_key_from_school_name(school_name):
-    hash_bytes = hashlib.sha256(school_name.encode()).digest()
-    key = base64.urlsafe_b64encode(hash_bytes)[:32]  # Fernet expects a 32-byte base64-encoded key
-    return Fernet(base64.urlsafe_b64encode(key))
+def derive_key_from_school_name(school_name):
+    # SHA256 ile anahtarı türet, 32 byte olarak al (AES-256 için)
+    return hashlib.sha256(school_name.encode()).digest()
 
 def encrypt_message_with_id(message, student_id):
     with open("student_ids.json", "r") as f:
@@ -19,19 +17,29 @@ def encrypt_message_with_id(message, student_id):
     if not school_name:
         raise ValueError("Bu öğrenci numarasına ait okul bilgisi bulunamadı.")
 
-    cipher = create_key_from_school_name(school_name)
-    encrypted = cipher.encrypt(message.encode())
-    return encrypted
+    key = derive_key_from_school_name(school_name)
+    aesgcm = AESGCM(key)
+
+    # 12 byte'lık rastgele nonce oluştur
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, message.encode(), None)
+
+    # QR'a koymak için JSON formatında hepsini base64 olarak encode et
+    payload = {
+        'nonce': base64.b64encode(nonce).decode(),
+        'cipher': base64.b64encode(ciphertext).decode()
+    }
+
+    return json.dumps(payload)
 
 def generate_qr(data, filename="gizli_qr.png"):
-    import qrcode
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=10,
         border=4,
     )
-    qr.add_data(data.decode())
+    qr.add_data(data)
     qr.make(fit=True)
 
     img = qr.make_image(fill_color="black", back_color="white")
@@ -42,5 +50,5 @@ if __name__ == "__main__":
     mesaj = input("Gizlenecek mesajı girin: ")
     okul_no = input("QR kod sadece hangi okul numarasıyla çözülecek? ")
 
-    encrypted_data = encrypt_message_with_id(mesaj, okul_no)
-    generate_qr(encrypted_data)
+    encrypted_json = encrypt_message_with_id(mesaj, okul_no)
+    generate_qr(encrypted_json)
