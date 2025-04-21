@@ -13,10 +13,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'QR Encrypted Access',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        useMaterial3: false,
       ),
       home: const HomePage(),
     );
@@ -39,7 +40,7 @@ class HomePage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock, size: 80, color: Colors.deepPurple),
+              //Icon(Icons.laptop, size: 80, color: Colors.deepPurple),
               const SizedBox(height: 20),
               Text(
                 'QR Şifreleme Sistemi',
@@ -51,13 +52,13 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
-                icon: const Icon(Icons.qr_code_scanner),
+                //icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('QR Kod Tara'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  textStyle: const TextStyle(fontSize: 16),
+                  textStyle: const TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 onPressed: () {
                   Navigator.push(
@@ -68,13 +69,13 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               ElevatedButton.icon(
-                icon: const Icon(Icons.qr_code),
+                //icon: const Icon(Icons.qr_code),
                 label: const Text('QR Kod Oluştur'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  textStyle: const TextStyle(fontSize: 16),
+                  textStyle: const TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 onPressed: () {
                   Navigator.push(

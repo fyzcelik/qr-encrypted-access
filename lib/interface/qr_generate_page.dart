@@ -11,30 +11,19 @@ class QrGeneratePage extends StatefulWidget {
 
 class _QrGeneratePageState extends State<QrGeneratePage> {
   final TextEditingController messageController = TextEditingController();
-  final TextEditingController studentIdController = TextEditingController();
   String? qrCodeData;
   bool isGenerating = false;
-  Map<String, String> allowedStudentIds =
-      {}; // Assuming this is populated from JSON
 
   Future<void> generateQrCode() async {
     final message = messageController.text.trim();
-    final studentId = studentIdController.text.trim();
-
-    if (message.isEmpty || studentId.isEmpty) {
+    if (message.isEmpty) {
       setState(() {
-        qrCodeData = 'Lütfen öğrenci numarası ve mesaj girin.';
+        qrCodeData = 'Lütfen mesaj girin.';
       });
       return;
     }
 
-    final schoolName = allowedStudentIds[studentId];
-    if (schoolName == null) {
-      setState(() {
-        qrCodeData = 'Bu öğrenci numarasına ait erişim izni bulunmamaktadır.';
-      });
-      return;
-    }
+    final schoolName = "Kırıkkale Üniversitesi";
 
     setState(() {
       isGenerating = true;
@@ -42,21 +31,21 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
     });
 
     try {
-      // ✅ Aynı şekilde: öğrenci numarasına göre anahtar üret
-      final keyBytes = sha256.convert(utf8.encode(studentId)).bytes;
+      final keyBytes = sha256.convert(utf8.encode(schoolName)).bytes;
       final secretKey = SecretKey(keyBytes);
+      final nonce = List<int>.filled(12, 1); // AES-GCM için 12 byte nonce
 
-      // ✅ Sabit nonce (12 bayt uzunluğunda olmalı)
-      final nonce = List.filled(12, 1);
-
-      final encrypter = AesGcm.with256bits();
-      final cipherText = await encrypter.encrypt(
+      final algorithm = AesGcm.with256bits();
+      final secretBox = await algorithm.encrypt(
         utf8.encode(message),
         secretKey: secretKey,
         nonce: nonce,
       );
 
-      final encodedMessage = base64.encode(cipherText.cipherText);
+      // Tüm şifreli veri + nonce + mac birleştirilerek tek parça yapılır
+      final encryptedCombined = secretBox.concatenation();
+      final encodedMessage = base64.encode(encryptedCombined);
+
       setState(() {
         qrCodeData = encodedMessage;
       });
@@ -74,13 +63,23 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("QR Kod Oluşturma")),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: TextButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text(
+            'Geri',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+        title: const Text("QR Kod Oluşturma"),
+        backgroundColor: Colors.deepPurple,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(Icons.qr_code, size: 80, color: Colors.deepPurple),
             const SizedBox(height: 16),
             Text(
               'QR Kod Oluştur',
@@ -92,14 +91,6 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
             ),
             const SizedBox(height: 24),
             TextField(
-              controller: studentIdController,
-              decoration: const InputDecoration(
-                labelText: 'Öğrenci Numarası',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
               controller: messageController,
               maxLines: 3,
               decoration: const InputDecoration(
@@ -110,12 +101,11 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
             const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: isGenerating ? null : generateQrCode,
-              icon: const Icon(Icons.lock),
               label: const Text("QR Kod Oluştur"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 16),
+                textStyle: const TextStyle(fontSize: 16, color: Colors.white),
               ),
             ),
             const SizedBox(height: 24),
@@ -123,7 +113,7 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
               Column(
                 children: [
                   const Text(
-                    'Şifreli Mesaj:',
+                    'Şifreli Mesaj (QR Kod):',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),

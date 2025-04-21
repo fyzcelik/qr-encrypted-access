@@ -29,11 +29,11 @@ def decrypt_message(encrypted_json, key):
 
 if __name__ == "__main__":
     qr_dosya = input("QR kod dosya adını girin: ")
-    okul_no = input("Okul numaranızı girin: ")
+    okul_no = input("Okul numaranızı girin: ").strip()
 
-    # Öğrenci ID'lerinden okul adı alma
+    # Öğrenci numarasından okul adı alınır
     with open("student_ids.json", "r") as f:
-        student_map = json.load(f)
+        student_map = {k.strip(): v.strip() for k, v in json.load(f).items()}
 
     school_name = student_map.get(okul_no)
     if not school_name:

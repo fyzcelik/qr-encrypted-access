@@ -28,17 +28,24 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
     final jsonString = await rootBundle.loadString('assets/student_ids.json');
     final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
     setState(() {
-      allowedStudentIds =
-          jsonMap.map((key, value) => MapEntry(key, value.toString()));
+      allowedStudentIds = jsonMap
+          .map((key, value) => MapEntry(key.trim(), value.toString().trim()));
     });
   }
 
   Future<void> decryptQrCode() async {
     final studentId = studentIdController.text.trim();
 
-    if (qrData == null || studentId.isEmpty) {
+    if (!isQrScanned) {
       setState(() {
-        resultMessage = 'Lütfen QR kodu okutun ve okul numarasını girin.';
+        resultMessage = 'Lütfen önce QR kodu okutun.';
+      });
+      return;
+    }
+
+    if (studentId.isEmpty) {
+      setState(() {
+        resultMessage = 'Lütfen okul numaranızı girin.';
       });
       return;
     }
@@ -57,18 +64,21 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
     });
 
     try {
-      // ✅ Şifreleme ile aynı şekilde: öğrenci numarasını SHA256 ile hashle
-      final keyBytes = sha256.convert(utf8.encode(studentId)).bytes;
+      final keyBytes = sha256.convert(utf8.encode(schoolName)).bytes;
       final secretKey = SecretKey(keyBytes);
+      final algorithm = AesGcm.with256bits();
 
-      // ✅ Sabit nonce kullan (QR üretme kısmında da aynısı olmalı!)
-      final nonce = List.filled(12, 1);
+      final encryptedBytes = base64.decode(qrData!);
 
-      final encrypter = AesGcm.with256bits();
-      final cipherBytes = base64.decode(qrData!);
+      // QR koddan gelen birleşik veri çözülüyor (nonce + ciphertext + mac)
+      final secretBox = SecretBox.fromConcatenation(
+        encryptedBytes,
+        nonceLength: 12,
+        macLength: 16,
+      );
 
-      final decrypted = await encrypter.decrypt(
-        SecretBox(cipherBytes, nonce: nonce, mac: Mac.empty),
+      final decrypted = await algorithm.decrypt(
+        secretBox,
         secretKey: secretKey,
       );
 
@@ -89,16 +99,29 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
     setState(() {
       qrData = value;
       isQrScanned = true;
+      resultMessage =
+          "✅ QR kod başarıyla okundu. Lütfen okul numaranızı girip 'Mesajı Getir' butonuna tıklayın.";
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("✅ QR Kod Okundu")),
+      const SnackBar(content: Text("✅ QR Kod Okundu")),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("QR Şifre Çözme")),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: TextButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          child: const Text(
+            'Geri',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+        title: const Text("QR Kod Oluşturma"),
+        backgroundColor: Colors.deepPurple,
+      ),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -114,45 +137,45 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
                         onQrScanned(code);
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                          const SnackBar(content: Text("❌ QR Kod Okunamadı")),
                         );
                       }
                     }
                   },
                 ),
               ),
-            if (isQrScanned)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  const Text(
+                    'Okul Numarası',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: studentIdController,
+                    enabled: isQrScanned, // 🔒 QR okutulmadan önce kapalı
+                    decoration: const InputDecoration(
+                      labelText: 'Okul Numarası',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed:
+                        (!isQrScanned || isLoading) ? null : decryptQrCode,
+                    child: const Text("📥 Mesajı Getir"),
+                  ),
+                  const SizedBox(height: 12),
+                  if (resultMessage.isNotEmpty)
                     Text(
-                      'Okul Numarası',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      resultMessage,
+                      style: const TextStyle(fontSize: 16),
                     ),
-                    SizedBox(height: 12),
-                    TextField(
-                      controller: studentIdController,
-                      decoration: InputDecoration(
-                        labelText: 'Okul Numarası',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: isLoading ? null : decryptQrCode,
-                      child: Text("📥 Mesajı Getir"),
-                    ),
-                    SizedBox(height: 12),
-                    if (resultMessage.isNotEmpty)
-                      Text(
-                        resultMessage,
-                        style: TextStyle(fontSize: 16),
-                      ),
-                  ],
-                ),
+                ],
               ),
+            ),
           ],
         ),
       ),
