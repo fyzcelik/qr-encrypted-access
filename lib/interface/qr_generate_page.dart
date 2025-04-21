@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class QrGeneratePage extends StatefulWidget {
@@ -16,53 +17,59 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
   Map<String, String> allowedStudentIds =
       {}; // Assuming this is populated from JSON
 
-  Future<void> generateQrCode() async {
-    final message = messageController.text.trim();
-    final studentId = studentIdController.text.trim();
+ Future<void> generateQrCode() async {
+  final message = messageController.text.trim();
+  final studentId = studentIdController.text.trim();
 
-    if (message.isEmpty || studentId.isEmpty) {
-      setState(() {
-        qrCodeData = 'Lütfen öğrenci numarası ve mesaj girin.';
-      });
-      return;
-    }
-
-    final schoolName = allowedStudentIds[studentId];
-    if (schoolName == null) {
-      setState(() {
-        qrCodeData = 'Bu öğrenci numarasına ait erişim izni bulunmamaktadır.';
-      });
-      return;
-    }
-
+  if (message.isEmpty || studentId.isEmpty) {
     setState(() {
-      isGenerating = true;
-      qrCodeData = '';
+      qrCodeData = 'Lütfen öğrenci numarası ve mesaj girin.';
     });
+    return;
+  }
 
-    try {
-      // Use a key based on the school name
-      final secretKey = SecretKey(utf8.encode(schoolName));
-      final encrypter = AesGcm.with256bits();
-      final cipherText = await encrypter.encrypt(
-        utf8.encode(message),
-        secretKey: secretKey,
-      );
+  final schoolName = allowedStudentIds[studentId];
+  if (schoolName == null) {
+    setState(() {
+      qrCodeData = 'Bu öğrenci numarasına ait erişim izni bulunmamaktadır.';
+    });
+    return;
+  }
 
-      final encodedMessage = base64.encode(cipherText.cipherText);
-      setState(() {
-        qrCodeData = encodedMessage;
-      });
-    } catch (e) {
-      setState(() {
-        qrCodeData = 'Şifreleme hatası: $e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() => isGenerating = false);
-      }
+  setState(() {
+    isGenerating = true;
+    qrCodeData = '';
+  });
+
+  try {
+    // ✅ Aynı şekilde: öğrenci numarasına göre anahtar üret
+    final keyBytes = sha256.convert(utf8.encode(studentId)).bytes;
+    final secretKey = SecretKey(keyBytes);
+
+    // ✅ Sabit nonce (12 bayt uzunluğunda olmalı)
+    final nonce = List.filled(12, 1);
+
+    final encrypter = AesGcm.with256bits();
+    final cipherText = await encrypter.encrypt(
+      utf8.encode(message),
+      secretKey: secretKey,
+      nonce: nonce,
+    );
+
+    final encodedMessage = base64.encode(cipherText.cipherText);
+    setState(() {
+      qrCodeData = encodedMessage;
+    });
+  } catch (e) {
+    setState(() {
+      qrCodeData = 'Şifreleme hatası: $e';
+    });
+  } finally {
+    if (mounted) {
+      setState(() => isGenerating = false);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

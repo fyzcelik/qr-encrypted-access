@@ -7,9 +7,9 @@ from cryptography.fernet import Fernet
 import json
 
 def create_key_from_school_name(school_name):
-    hash = hashlib.sha256(school_name.encode()).digest()
-    key = base64.urlsafe_b64encode(hash)
-    return Fernet(key)
+    hash_bytes = hashlib.sha256(school_name.encode()).digest()
+    key = base64.urlsafe_b64encode(hash_bytes)[:32]  # Fernet expects a 32-byte base64-encoded key
+    return Fernet(base64.urlsafe_b64encode(key))
 
 def encrypt_message_with_id(message, student_id):
     with open("student_ids.json", "r") as f:

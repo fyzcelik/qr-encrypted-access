@@ -10,7 +10,8 @@ app = FastAPI()
 
 def create_key_from_school(school_name: str):
     hash_val = hashlib.sha256(school_name.encode()).digest()
-    return base64.urlsafe_b64encode(hash_val)
+    key = base64.urlsafe_b64encode(hash_val)[:32]
+    return base64.urlsafe_b64encode(key)
 
 def extract_encrypted_message_from_qr(file_path: str):
     img = cv2.imread(file_path)

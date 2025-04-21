@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart';
 
 class QrDecryptPage extends StatefulWidget {
   @override
@@ -55,11 +56,18 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
     });
 
     try {
-      final secretKey = SecretKey(utf8.encode(schoolName));
+      // ✅ Şifreleme ile aynı şekilde: öğrenci numarasını SHA256 ile hashle
+      final keyBytes = sha256.convert(utf8.encode(studentId)).bytes;
+      final secretKey = SecretKey(keyBytes);
+
+      // ✅ Sabit nonce kullan (QR üretme kısmında da aynısı olmalı!)
+      final nonce = List.filled(12, 1);
+
       final encrypter = AesGcm.with256bits();
       final cipherBytes = base64.decode(qrData!);
+
       final decrypted = await encrypter.decrypt(
-        SecretBox(cipherBytes, nonce: [], mac: Mac.empty),
+        SecretBox(cipherBytes, nonce: nonce, mac: Mac.empty),
         secretKey: secretKey,
       );
 

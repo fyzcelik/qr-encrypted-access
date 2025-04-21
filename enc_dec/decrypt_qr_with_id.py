@@ -5,9 +5,9 @@ import json
 from cryptography.fernet import Fernet
 
 def create_key_from_school_name(school_name):
-    hash = hashlib.sha256(school_name.encode()).digest()
-    key = base64.urlsafe_b64encode(hash)
-    return Fernet(key)
+    hash_bytes = hashlib.sha256(school_name.encode()).digest()  # 32 bytes
+    key = base64.urlsafe_b64encode(hash_bytes)[:32]  # Trim to 32 bytes for AES-GCM
+    return Fernet(base64.urlsafe_b64encode(key))  # Re-encode as Fernet expects base64
 
 def read_qr(filename):
     img = cv2.imread(filename)
