@@ -31,7 +31,6 @@ if __name__ == "__main__":
     qr_dosya = input("QR kod dosya adını girin: ")
     okul_no = input("Okul numaranızı girin: ").strip()
 
-    # Öğrenci numarasından okul adı alınır
     with open("student_ids.json", "r") as f:
         student_map = {k.strip(): v.strip() for k, v in json.load(f).items()}
 
@@ -46,8 +45,8 @@ if __name__ == "__main__":
     if qr_data:
         result = decrypt_message(qr_data, key)
         if result:
-            print(f"✅ Mesaj başarıyla çözüldü: {result}")
+            print(f"Mesaj başarıyla çözüldü: {result}")
         else:
-            print("❌ Mesaj çözülemedi. Okul numarası veya veri hatalı olabilir.")
+            print("Mesaj çözülemedi. Okul numarası veya veri hatalı olabilir.")
     else:
-        print("❌ QR koddan veri alınamadı.")
+        print("QR koddan veri alınamadı.")

@@ -155,7 +155,7 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: studentIdController,
-                    enabled: isQrScanned, // 🔒 QR okutulmadan önce kapalı
+                    enabled: isQrScanned,
                     decoration: const InputDecoration(
                       labelText: 'Okul Numarası',
                       border: OutlineInputBorder(),

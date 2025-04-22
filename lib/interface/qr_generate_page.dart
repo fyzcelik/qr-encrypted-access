@@ -33,7 +33,7 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
     try {
       final keyBytes = sha256.convert(utf8.encode(schoolName)).bytes;
       final secretKey = SecretKey(keyBytes);
-      final nonce = List<int>.filled(12, 1); // AES-GCM için 12 byte nonce
+      final nonce = List<int>.filled(12, 1);
 
       final algorithm = AesGcm.with256bits();
       final secretBox = await algorithm.encrypt(
@@ -42,7 +42,6 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
         nonce: nonce,
       );
 
-      // Tüm şifreli veri + nonce + mac birleştirilerek tek parça yapılır
       final encryptedCombined = secretBox.concatenation();
       final encodedMessage = base64.encode(encryptedCombined);
 

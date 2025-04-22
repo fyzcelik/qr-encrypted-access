@@ -33,16 +33,14 @@ async def decrypt_qr(student_id: str = Form(...), qr_file: UploadFile = File(...
         with open("student_ids.json", "r") as f:
             student_map = json.load(f)
 
-        school_name = student_map.get(student_id.strip())  # Boşlukları temizle
+        school_name = student_map.get(student_id.strip())  
         if not school_name:
             return {"success": False, "message": f"Öğrenci numarası ({student_id}) bulunamadı."}
 
         key = derive_key_from_school(school_name)
-
-        # QR içeriği: {"nonce": "...", "cipher": "..."}
+  
         encrypted_data = json.loads(encrypted_json)
 
-        # Verinin geçerli olduğundan emin ol
         if "nonce" not in encrypted_data or "cipher" not in encrypted_data:
             return {"success": False, "message": "QR içeriği geçerli değil."}
 

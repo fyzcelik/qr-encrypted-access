@@ -21,7 +21,6 @@ def encrypt_message_with_id(message, student_id):
     key = derive_key_from_school_name(school_name)
     aesgcm = AESGCM(key)
 
-    # 12 byte'lık rastgele nonce oluştur
     nonce = os.urandom(12)
     ciphertext = aesgcm.encrypt(nonce, message.encode(), None)
 
