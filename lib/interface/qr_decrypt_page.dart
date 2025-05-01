@@ -8,6 +8,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 
 class QrDecryptPage extends StatefulWidget {
   @override
@@ -51,13 +52,6 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
   Future<void> decryptQrCode() async {
     final studentId = studentIdController.text.trim();
 
-    if (!isQrScanned) {
-      setState(() {
-        resultMessage = 'Lütfen önce QR kodu okutun.';
-      });
-      return;
-    }
-
     if (studentId.isEmpty) {
       setState(() {
         resultMessage = 'Lütfen okul numaranızı girin.';
@@ -73,34 +67,43 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
       return;
     }
 
+    if (hiddenImageBytes == null) {
+      setState(() {
+        resultMessage = 'Lütfen gizli görsel seçin.';
+      });
+      return;
+    }
+
     setState(() {
       isLoading = true;
       resultMessage = '';
     });
 
     try {
-      final keyBytes = sha256.convert(utf8.encode(schoolName)).bytes;
-      final secretKey = SecretKey(keyBytes);
-      final algorithm = AesGcm.with256bits();
+      final uri = Uri.parse("http://10.0.2.2:8000/decode");
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['student_id'] = studentId
+        ..files.add(http.MultipartFile.fromBytes(
+          'image',
+          hiddenImageBytes!,
+          filename: 'hidden_image.png',
+        ));
 
-      // QR koddan gelen birleşik veri çözülüyor (nonce + ciphertext + mac)
-      final secretBox = SecretBox.fromConcatenation(
-        hiddenImageBytes!,
-        nonceLength: 12,
-        macLength: 16,
-      );
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
 
-      final decrypted = await algorithm.decrypt(
-        secretBox,
-        secretKey: secretKey,
-      );
-
-      setState(() {
-        resultMessage = '📩 Mesaj: ${utf8.decode(decrypted)}';
-      });
+      if (response.statusCode == 200) {
+        setState(() {
+          resultMessage = '📩 Mesaj: $responseBody';
+        });
+      } else {
+        setState(() {
+          resultMessage = '❌ Sunucudan hata yanıtı alındı: $responseBody';
+        });
+      }
     } catch (e) {
       setState(() {
-        resultMessage = '❌ Şifre çözme hatası: $e';
+        resultMessage = '❌ Sunucuya istek gönderilirken hata oluştu: $e';
       });
     } finally {
       setState(() => isLoading = false);
@@ -142,20 +145,24 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            MobileScanner(
-              onDetect: (BarcodeCapture barcodeCapture) {
-                final List<Barcode> barcodes = barcodeCapture.barcodes;
-                if (barcodes.isNotEmpty) {
-                  final String? code = barcodes.first.rawValue;
-                  if (code != null && code.isNotEmpty) {
-                    onQrScanned(code);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("❌ QR Kod Okunamadı")),
-                    );
+            SizedBox(
+              width: double.infinity,
+              height: 300, // örnek sabit yükseklik
+              child: MobileScanner(
+                onDetect: (BarcodeCapture barcodeCapture) {
+                  final List<Barcode> barcodes = barcodeCapture.barcodes;
+                  if (barcodes.isNotEmpty) {
+                    final String? code = barcodes.first.rawValue;
+                    if (code != null && code.isNotEmpty) {
+                      onQrScanned(code);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                      );
+                    }
                   }
-                }
-              },
+                },
+              ),
             ),
             if (!isQrScanned)
               const Text(

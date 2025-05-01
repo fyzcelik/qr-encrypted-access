@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cryptography/cryptography.dart';
-import 'package:crypto/crypto.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 
 class QrGeneratePage extends StatefulWidget {
   @override
@@ -13,90 +14,55 @@ class QrGeneratePage extends StatefulWidget {
 }
 
 class _QrGeneratePageState extends State<QrGeneratePage> {
-  final TextEditingController messageController = TextEditingController();
   String? qrCodeData;
-  bool isGenerating = false;
   Uint8List? hiddenImageBytes;
-  bool isImageHidden = false;
+  bool isImageVisible = false;
+  final TextEditingController messageController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
 
-  Future<void> generateQrCode() async {
+  Future<void> generateAndHideQr() async {
     final message = messageController.text.trim();
     if (message.isEmpty) {
-      setState(() {
-        qrCodeData = 'Lütfen mesaj girin.';
-        hiddenImageBytes = null;
-        isImageHidden = false;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lütfen bir mesaj giriniz')),
+      );
       return;
     }
 
-    final schoolName = "Kırıkkale Üniversitesi";
+    // Resim seçme
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
 
-    setState(() {
-      isGenerating = true;
-      qrCodeData = '';
-      hiddenImageBytes = null;
-      isImageHidden = false;
-    });
+    // API'ye gönder
+    final uri = Uri.parse("http://10.0.2.2:8000/qr_gizle");
+    final request = http.MultipartRequest('POST', uri)
+      ..fields['mesaj'] = message
+      ..files.add(await http.MultipartFile.fromPath(
+        'resim',
+        image.path,
+      ));
 
-    try {
-      final keyBytes = sha256.convert(utf8.encode(schoolName)).bytes;
-      final secretKey = SecretKey(keyBytes);
-      final nonce = List<int>.filled(12, 1);
+    final response = await request.send();
 
-      final algorithm = AesGcm.with256bits();
-      final secretBox = await algorithm.encrypt(
-        utf8.encode(message),
-        secretKey: secretKey,
-        nonce: nonce,
-      );
-
-      final encryptedCombined = secretBox.concatenation();
-      final encodedMessage = base64.encode(encryptedCombined);
-
-      final painter = QrPainter(
-        data: encodedMessage,
-        version: QrVersions.auto,
-        gapless: true,
-        color: Colors.black,
-        emptyColor: Colors.white,
-      );
-
-      final picData = await painter.toImageData(300);
-      if (picData != null) {
-        final qrBytes = picData.buffer.asUint8List();
-
-        // QR'ı beyaz bir görselin içine gizle
-        final int size = 300;
-        final Uint8List coverBytes =
-            Uint8List.fromList(List.filled(size * size * 4, 255));
-        final Uint8List result = Uint8List(coverBytes.length);
-
-        for (int i = 0; i < qrBytes.length && i < coverBytes.length; i++) {
-          result[i] =
-              (coverBytes[i] & 0xFE) | ((qrBytes[i] & 0x80) >> 7); // MSB -> LSB
-        }
-
-        setState(() {
-          hiddenImageBytes = result;
-          isImageHidden = true;
-        });
-
-        // Kaydetme işlemi
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/hidden_qr_image.png');
-        await file.writeAsBytes(result);
-      }
-    } catch (e) {
+    if (response.statusCode == 200) {
+      final resBytes = await response.stream.toBytes();
       setState(() {
-        qrCodeData = 'Şifreleme hatası: $e';
-        hiddenImageBytes = null;
-        isImageHidden = false;
+        hiddenImageBytes = resBytes;
+        isImageVisible = true;
       });
-    } finally {
-      if (mounted) {
-        setState(() => isGenerating = false);
-      }
+
+      // Dosyayı kaydet
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/gizli_qr.png');
+      await file.writeAsBytes(resBytes);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QR kodu başarıyla resme gizlendi')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata oluştu: ${response.statusCode}')),
+      );
     }
   }
 
@@ -104,15 +70,7 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: TextButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          child: const Text(
-            'Geri',
-            style: TextStyle(color: Colors.white),
-          ),
-        ),
-        title: const Text("QR Kod Oluşturma"),
+        title: const Text("QR Kod Gizleme"),
         backgroundColor: Colors.deepPurple,
       ),
       body: SingleChildScrollView(
@@ -120,86 +78,59 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 16),
-            Text(
-              'QR Kod Oluştur',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.deepPurple,
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
             TextField(
               controller: messageController,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Mesajınızı girin',
+              decoration: InputDecoration(
+                labelText: 'Gizlenecek mesaj',
                 border: OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.clear),
+                  onPressed: () => messageController.clear(),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             ElevatedButton.icon(
-              onPressed: isGenerating ? null : generateQrCode,
-              label: const Text("QR Kod Oluştur"),
+              onPressed: generateAndHideQr,
+              icon: Icon(Icons.qr_code),
+              label: Text("QR Oluştur ve Gizle"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 16, color: Colors.white),
+                padding: EdgeInsets.symmetric(vertical: 16),
               ),
             ),
-            const SizedBox(height: 24),
-            if (qrCodeData != null && qrCodeData!.isNotEmpty)
+            SizedBox(height: 24),
+            if (isImageVisible && hiddenImageBytes != null)
               Column(
                 children: [
-                  const Text(
-                    'Şifreli Mesaj (QR Kod):',
+                  Text(
+                    'Oluşturulan Gizli Resim:',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: QrImageView(
-                      data: qrCodeData!,
-                      version: QrVersions.auto,
-                      size: 200.0,
-                    ),
+                  SizedBox(height: 16),
+                  Image.memory(
+                    hiddenImageBytes!,
+                    width: 300,
+                    height: 300,
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final directory =
+                          await getApplicationDocumentsDirectory();
+                      final file = File('${directory.path}/gizli_qr.png');
+                      if (await file.exists()) {
+                        // Paylaşım işlevselliği eklenebilir
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('Resim kaydedildi: ${file.path}')),
+                        );
+                      }
+                    },
+                    child: Text('Kaydet'),
                   ),
                 ],
-              ),
-            if (isImageHidden)
-              Column(
-                children: [
-                  const Text(
-                    'Gizlenmiş QR Görseli:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Image.memory(
-                      hiddenImageBytes!,
-                      width: 300,
-                      height: 300,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 12),
-            if (isImageHidden)
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final directory = await getApplicationDocumentsDirectory();
-                  final file = File('${directory.path}/hidden_qr_image.png');
-                  // Dosya kaydetme veya paylaşma işlemleri yapılabilir.
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Görsel kaydedildi: ${file.path}")),
-                  );
-                },
-                icon: const Icon(Icons.save),
-                label: const Text("Resmi Kaydet"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                ),
               ),
           ],
         ),

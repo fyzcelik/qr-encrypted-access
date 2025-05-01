@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_encrypted_access/interface/qr_generate_page.dart';
-import 'package:qr_encrypted_access/interface/qr_decrypt_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -51,22 +50,7 @@ class HomePage extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
-              ElevatedButton.icon(
-                //icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('QR Kod Tara'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  textStyle: const TextStyle(fontSize: 16, color: Colors.white),
-                ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => QrDecryptPage()),
-                  );
-                },
-              ),
+
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 //icon: const Icon(Icons.qr_code),
