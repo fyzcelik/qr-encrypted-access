@@ -1,9 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:cryptography/cryptography.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class QrDecryptPage extends StatefulWidget {
   @override
@@ -17,6 +21,7 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
   bool isQrScanned = false;
   final TextEditingController studentIdController = TextEditingController();
   Map<String, String> allowedStudentIds = {};
+  Uint8List? hiddenImageBytes;
 
   @override
   void initState() {
@@ -31,6 +36,16 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
       allowedStudentIds = jsonMap
           .map((key, value) => MapEntry(key.trim(), value.toString().trim()));
     });
+  }
+
+  Future<void> pickImage() async {
+    final imagePicker = ImagePicker();
+    final pickedFile = await imagePicker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      final file = File(pickedFile.path);
+      hiddenImageBytes = await file.readAsBytes();
+      setState(() {});
+    }
   }
 
   Future<void> decryptQrCode() async {
@@ -68,11 +83,9 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
       final secretKey = SecretKey(keyBytes);
       final algorithm = AesGcm.with256bits();
 
-      final encryptedBytes = base64.decode(qrData!);
-
       // QR koddan gelen birleşik veri çözülüyor (nonce + ciphertext + mac)
       final secretBox = SecretBox.fromConcatenation(
-        encryptedBytes,
+        hiddenImageBytes!,
         nonceLength: 12,
         macLength: 16,
       );
@@ -95,16 +108,11 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
   }
 
   void onQrScanned(String? value) {
-    if (value == null || isQrScanned) return;
+    if (value == null || !isQrScanned) return;
     setState(() {
       qrData = value;
       isQrScanned = true;
-      resultMessage =
-          "✅ QR kod başarıyla okundu. Lütfen okul numaranızı girip 'Mesajı Getir' butonuna tıklayın.";
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("✅ QR Kod Okundu")),
-    );
   }
 
   @override
@@ -119,62 +127,70 @@ class _QrDecryptPageState extends State<QrDecryptPage> {
             style: TextStyle(color: Colors.white),
           ),
         ),
-        title: const Text("QR Kod Oluşturma"),
+        title: const Text("QR Kod Çözme"),
         backgroundColor: Colors.deepPurple,
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const SizedBox(height: 24),
+            const Text(
+              'QR Kod Çözümleme',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            MobileScanner(
+              onDetect: (BarcodeCapture barcodeCapture) {
+                final List<Barcode> barcodes = barcodeCapture.barcodes;
+                if (barcodes.isNotEmpty) {
+                  final String? code = barcodes.first.rawValue;
+                  if (code != null && code.isNotEmpty) {
+                    onQrScanned(code);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("❌ QR Kod Okunamadı")),
+                    );
+                  }
+                }
+              },
+            ),
             if (!isQrScanned)
-              SizedBox(
-                height: 300,
-                child: MobileScanner(
-                  onDetect: (BarcodeCapture barcodeCapture) {
-                    final List<Barcode> barcodes = barcodeCapture.barcodes;
-                    if (barcodes.isNotEmpty) {
-                      final String code = barcodes.first.rawValue ?? '';
-                      if (code.isNotEmpty) {
-                        onQrScanned(code);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("❌ QR Kod Okunamadı")),
-                        );
-                      }
-                    }
-                  },
-                ),
+              const Text(
+                'Lütfen QR kodu tarayın.',
+                style: TextStyle(fontSize: 16, color: Colors.red),
               ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  const Text(
-                    'Okul Numarası',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: studentIdController,
-                    enabled: isQrScanned,
-                    decoration: const InputDecoration(
-                      labelText: 'Okul Numarası',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed:
-                        (!isQrScanned || isLoading) ? null : decryptQrCode,
-                    child: const Text("📥 Mesajı Getir"),
-                  ),
-                  const SizedBox(height: 12),
-                  if (resultMessage.isNotEmpty)
-                    Text(
-                      resultMessage,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                ],
+            if (qrData != null)
+              Text(
+                'QR Verisi: $qrData',
+                style: const TextStyle(fontSize: 16, color: Colors.green),
               ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: studentIdController,
+              decoration: const InputDecoration(
+                labelText: 'Öğrenci Numarası',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: decryptQrCode,
+              child: isLoading
+                  ? const CircularProgressIndicator()
+                  : const Text('Çözümle'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                textStyle: const TextStyle(fontSize: 16, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              resultMessage,
+              style: const TextStyle(fontSize: 16, color: Colors.black),
             ),
           ],
         ),

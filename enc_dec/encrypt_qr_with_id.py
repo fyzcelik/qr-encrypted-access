@@ -52,3 +52,27 @@ if __name__ == "__main__":
 
     encrypted_json = encrypt_message_with_id(mesaj, okul_no)
     generate_qr(encrypted_json)
+
+    kapak_dosya = input("QR kod hangi görselin içine gizlensin? ")
+    cikti_dosya = "gizli_kapak.png"
+    hide_qr_in_image("gizli_qr.png", kapak_dosya, cikti_dosya)
+
+from PIL import Image
+
+def hide_qr_in_image(qr_path, cover_path, output_path):
+    qr_img = Image.open(qr_path).convert("1")  # siyah-beyaz
+    cover_img = Image.open(cover_path).convert("RGB")
+
+    qr_img = qr_img.resize(cover_img.size)
+    qr_pixels = qr_img.load()
+    cover_pixels = cover_img.load()
+
+    for y in range(cover_img.height):
+        for x in range(cover_img.width):
+            r, g, b = cover_pixels[x, y]
+            bit = 1 if qr_pixels[x, y] == 0 else 0  # siyah: 0, beyaz: 1
+            r = (r & ~1) | bit
+            cover_pixels[x, y] = (r, g, b)
+
+    cover_img.save(output_path)
+    print(f"[+] QR kod gizlenmiş görsel oluşturuldu: {output_path}")

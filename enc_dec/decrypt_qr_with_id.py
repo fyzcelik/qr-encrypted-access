@@ -4,6 +4,24 @@ import base64
 import json
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+def extract_qr_from_image(cover_image_path, output_qr_path):
+    cover_img = cv2.imread(cover_image_path)
+    if cover_img is None:
+        print("[!] Görsel yüklenemedi.")
+        return False
+
+    # Gizlenmiş QR kod LSB yöntemine göre kırmızı kanalın en düşük bitine saklanmış varsayılıyor
+    height, width, _ = cover_img.shape
+    qr_img = cv2.cvtColor(cover_img, cv2.COLOR_BGR2GRAY)
+
+    for y in range(height):
+        for x in range(width):
+            lsb = cover_img[y, x, 2] & 1  # kırmızı kanal
+            qr_img[y, x] = 255 if lsb else 0
+
+    cv2.imwrite(output_qr_path, qr_img)
+    return True
+
 def derive_key_from_school_name(school_name):
     return hashlib.sha256(school_name.encode()).digest()
 
@@ -28,6 +46,8 @@ def decrypt_message(encrypted_json, key):
         return None
 
 if __name__ == "__main__":
+    kapak_dosya = input("QR kodu içeren görselin adını girin (kapak görsel): ")
+    gizli_qr_dosya = "cikarilan_qr.png"
     qr_dosya = input("QR kod dosya adını girin: ")
     okul_no = input("Okul numaranızı girin: ").strip()
 
@@ -41,7 +61,11 @@ if __name__ == "__main__":
 
     key = derive_key_from_school_name(school_name)
 
-    qr_data = read_qr(qr_dosya)
+    if not extract_qr_from_image(kapak_dosya, gizli_qr_dosya):
+        print("Gizli QR çıkarılamadı.")
+        exit()
+
+    qr_data = read_qr(gizli_qr_dosya)
     if qr_data:
         result = decrypt_message(qr_data, key)
         if result:

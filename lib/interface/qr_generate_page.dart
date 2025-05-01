@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:crypto/crypto.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class QrGeneratePage extends StatefulWidget {
   @override
@@ -13,12 +16,16 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
   final TextEditingController messageController = TextEditingController();
   String? qrCodeData;
   bool isGenerating = false;
+  Uint8List? hiddenImageBytes;
+  bool isImageHidden = false;
 
   Future<void> generateQrCode() async {
     final message = messageController.text.trim();
     if (message.isEmpty) {
       setState(() {
         qrCodeData = 'Lütfen mesaj girin.';
+        hiddenImageBytes = null;
+        isImageHidden = false;
       });
       return;
     }
@@ -28,6 +35,8 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
     setState(() {
       isGenerating = true;
       qrCodeData = '';
+      hiddenImageBytes = null;
+      isImageHidden = false;
     });
 
     try {
@@ -45,12 +54,44 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
       final encryptedCombined = secretBox.concatenation();
       final encodedMessage = base64.encode(encryptedCombined);
 
-      setState(() {
-        qrCodeData = encodedMessage;
-      });
+      final painter = QrPainter(
+        data: encodedMessage,
+        version: QrVersions.auto,
+        gapless: true,
+        color: Colors.black,
+        emptyColor: Colors.white,
+      );
+
+      final picData = await painter.toImageData(300);
+      if (picData != null) {
+        final qrBytes = picData.buffer.asUint8List();
+
+        // QR'ı beyaz bir görselin içine gizle
+        final int size = 300;
+        final Uint8List coverBytes =
+            Uint8List.fromList(List.filled(size * size * 4, 255));
+        final Uint8List result = Uint8List(coverBytes.length);
+
+        for (int i = 0; i < qrBytes.length && i < coverBytes.length; i++) {
+          result[i] =
+              (coverBytes[i] & 0xFE) | ((qrBytes[i] & 0x80) >> 7); // MSB -> LSB
+        }
+
+        setState(() {
+          hiddenImageBytes = result;
+          isImageHidden = true;
+        });
+
+        // Kaydetme işlemi
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/hidden_qr_image.png');
+        await file.writeAsBytes(result);
+      }
     } catch (e) {
       setState(() {
         qrCodeData = 'Şifreleme hatası: $e';
+        hiddenImageBytes = null;
+        isImageHidden = false;
       });
     } finally {
       if (mounted) {
@@ -124,6 +165,41 @@ class _QrGeneratePageState extends State<QrGeneratePage> {
                     ),
                   ),
                 ],
+              ),
+            if (isImageHidden)
+              Column(
+                children: [
+                  const Text(
+                    'Gizlenmiş QR Görseli:',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Image.memory(
+                      hiddenImageBytes!,
+                      width: 300,
+                      height: 300,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 12),
+            if (isImageHidden)
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final directory = await getApplicationDocumentsDirectory();
+                  final file = File('${directory.path}/hidden_qr_image.png');
+                  // Dosya kaydetme veya paylaşma işlemleri yapılabilir.
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Görsel kaydedildi: ${file.path}")),
+                  );
+                },
+                icon: const Icon(Icons.save),
+                label: const Text("Resmi Kaydet"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                ),
               ),
           ],
         ),
