@@ -15,8 +15,9 @@ dependencies:
   flutter_test:
     sdk: flutter
   file_picker: ^10.1.2
-  path_provider: ^2.1.5
   image_picker: ^1.1.2
+  path_provider: ^2.0.15
+
 
 flutter:
   assets:
