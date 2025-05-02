@@ -1,101 +1,122 @@
+import cv2
 import qrcode
 import numpy as np
 from PIL import Image
-import os
+from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import mean_squared_error as mse
+from tabulate import tabulate
+
 
 def generate_qr(message, filename):
-    """
-    Verilen mesajı QR koda çevirir ve filename adıyla kaydeder.
-    """
-    try:
-        qr = qrcode.make(message)
-        qr.save(filename)
-        print(f"QR kod '{filename}' dosyasına kaydedildi.")
-    except Exception as e:
-        print(f"QR kodu oluşturulurken hata: {str(e)}")
-        raise RuntimeError(f"QR kodu oluşturulamadı: {str(e)}")
+    qr = qrcode.make(message)
+    qr.save(filename)
+    print(f"✅ QR kod '{filename}' dosyasına kaydedildi.")
 
-def embed_qr_into_image(container_path, qr_path, output_path):
-    """
-    Verilen container (kaplayıcı) resim üzerine QR kodu gizler.
-    Burada, QR kod sol üst köşeye, resmin kırmızı kanalının LSB'sine yerleştirilir.
-    """
-    try:
-        # Kaplayıcı resmi aç ve RGB formatına çevir
-        container = Image.open(container_path).convert("RGB")
-        container_arr = np.array(container)
-        
-        # QR kodunu aç: burada "L" moduna çevirip eşikleme uygulaması yaptık
-        qr = Image.open(qr_path).convert('L')
-        
-        # QR kod boyutunu uyumlu hale getirelim (container boyutuna göre)
-        qr = qr.resize((100, 100))  # Sabit boyut, ama ihtiyaca göre değiştirebilirsiniz.
-        qr_arr = np.array(qr)
-        
-        # Manuel eşikleme: 128 altındaki değerleri 0, üzerindekileri 1 yapalım
-        qr_bits = (qr_arr > 128).astype(np.uint8)
-        
-        # Container'ın sol üst 100x100 bölgesini seçelim
-        region = container_arr[:100, :100, :]
-        
-        # Kırmızı kanalın (ilk kanal) LSB'sini, qr_bits ile değiştirelim
+
+def embed(container_path, qr_path, output_path, method):
+    container = Image.open(container_path).convert("RGBA")
+    container_arr = np.array(container)
+
+    qr = Image.open(qr_path).convert('L').resize((100, 100))
+    qr_arr = np.array(qr)
+    qr_bits = (qr_arr > 128).astype(np.uint8)
+
+    region = container_arr[:100, :100].copy()
+
+    if method == 'lsb-red':
         region[:, :, 0] = (region[:, :, 0] & ~1) | qr_bits
-        container_arr[:100, :100, :] = region
-        
-        # Güncellenmiş resmi oluşturup kaydedelim
-        stego = Image.fromarray(container_arr)
-        stego.save(output_path)
-        print(f"QR kod gizlenmiş resim '{output_path}' olarak kaydedildi.")
-    except Exception as e:
-        print(f"QR gizleme hatası: {str(e)}")
-        raise RuntimeError(f"QR kodu görsele gizlenemedi: {str(e)}")
-def extract_qr_from_image(stego_path, output_qr_path):
-    """
-    Gizlenmiş resmin (stego) sol üst köşesinden (100x100 bölge) QR kodu çıkarır.
-    """
-    try:
-        stego = Image.open(stego_path).convert("RGB")
-        arr = np.array(stego)
-        
-        # Gömülü bölgeyi alalım
-        region = arr[:100, :100, :]
-        
-        # Kırmızı kanalın LSB'sini çıkaralım
-        qr_bits = region[:, :, 0] & 1  # 0 veya 1 değerleri elde edilir.
-        
-        # Bit değerlerini 0 veya 255 ölçeğine getirelim
-        qr_arr = (qr_bits * 255).astype(np.uint8)
-        
-        # QR kodunu oluşturup kaydedelim
-        qr_img = Image.fromarray(qr_arr, mode="L")
-        
-        # Dinamik eşikleme ve iyileştirme yapılabilir
-        qr_img.save(output_qr_path)
-        print(f"Çözülmüş QR kod '{output_qr_path}' dosyasına kaydedildi.")
-    except Exception as e:
-        print(f"QR çıkarma hatası: {str(e)}")
-        raise RuntimeError(f"QR çıkarılamadı: {str(e)}")
+    elif method == 'lsb-multichannel':
+        region[:, :, 1] = (region[:, :, 1] & ~1) | qr_bits
+        region[:, :, 2] = (region[:, :, 2] & ~1) | qr_bits
+    elif method == 'alpha-channel':
+        region[:, :, 3] = (region[:, :, 3] & ~1) | qr_bits
+    else:
+        raise ValueError("❌ Geçersiz gömme yöntemi")
+
+    container_arr[:100, :100] = region
+    stego_img = Image.fromarray(container_arr)
+    stego_img.save(output_path)
+    print(f"📦 {method} yöntemiyle QR kod '{output_path}' görseline gömüldü.")
+
+
+def extract_qr(stego_path, output_path, method):
+    stego = Image.open(stego_path).convert("RGBA")
+    arr = np.array(stego)
+    region = arr[:100, :100]
+
+    if method == 'lsb-red':
+        qr_bits = region[:, :, 0] & 1
+    elif method == 'lsb-multichannel':
+        qr_bits = ((region[:, :, 1] & 1) + (region[:, :, 2] & 1)) // 2
+    elif method == 'alpha-channel':
+        qr_bits = region[:, :, 3] & 1
+    else:
+        raise ValueError("❌ Geçersiz çözümleme yöntemi")
+
+    qr_arr = (qr_bits * 255).astype(np.uint8)
+    qr_img = Image.fromarray(qr_arr, mode='L')
+    qr_img.save(output_path)
+    print(f"🔍 {method} yöntemiyle QR çıkarıldı: {output_path}")
+
+
+def compare_images(original_path, stego_path):
+    orig = np.array(Image.open(original_path).convert("RGB"))
+    stego = np.array(Image.open(stego_path).convert("RGB"))
+    mse_val = mse(orig, stego)
+
+    if mse_val == 0:
+        psnr_val = float('inf')
+    else:
+        psnr_val = psnr(orig, stego)
+
+    return psnr_val, mse_val
+
+
+def decode_qr(image_path):
+    img = cv2.imread(image_path)
+    detector = cv2.QRCodeDetector()
+    data, _, _ = detector.detectAndDecode(img)
+    return data if data else None
+
 
 def main():
     try:
-        # 1. Adım: Mesajı al ve QR koda dönüştür
-        message = input("Lütfen bir mesaj girin: ")
+        message = input("📥 Lütfen QR koduna gömülecek mesajı girin: ")
         qr_filename = "qr_kod.png"
         generate_qr(message, qr_filename)
-        
-        # 2. Adım: Kaplayıcı resim yolunu al
-        container_path = input("QR kodu saklamak için bir resim dosyası yolu girin (örn. container.jpg): ")
-        stego_filename = "gizlenmis_resim.png"
-        embed_qr_into_image(container_path, qr_filename, stego_filename)
-        
-        # 3. Adım: Çözümleme için bekle
-        input("Gizlenmiş resmi çıkarmak için Enter'a basın...")
-        extracted_qr_filename = "cozulmus_qr.png"
-        extract_qr_from_image(stego_filename, extracted_qr_filename)
-        
-        print("İşlem tamamlandı. Çözülmüş QR kod görüntüsünü kontrol edebilirsiniz.")
+
+        container_path = input("📁 Kaplayıcı (container) görsel dosya yolunu girin (örn: container.png): ")
+
+        methods = ['lsb-red', 'lsb-multichannel', 'alpha-channel']
+        results = []
+
+        for method in methods:
+            print(f"\n🔧 {method.upper()} yöntemiyle işleniyor...")
+            stego_filename = f"gizlenmiş_qr_{method}.png"
+            extracted_qr = f"çözülmüş_qr_{method}.png"
+
+            embed(container_path, qr_filename, stego_filename, method)
+            extract_qr(stego_filename, extracted_qr, method)
+
+            qr_text = decode_qr(extracted_qr)
+            match = qr_text == message
+            psnr_val, mse_val = compare_images(container_path, stego_filename)
+            psnr_str = f"{psnr_val:.2f}" if psnr_val != float('inf') else "∞"
+
+            results.append({
+                "Yöntem": method,
+                "PSNR (dB)": psnr_str,
+                "MSE": f"{mse_val:.2f}",
+                "QR Doğruluğu": "✅" if match else "❌",
+                "Çözülen Mesaj": qr_text if qr_text else "Yok"
+            })
+
+        print("\n📊 Karşılaştırma Tablosu:")
+        print(tabulate(results, headers="keys", tablefmt="fancy_grid"))
+
     except Exception as e:
-        print(f"Main işlevinde hata oluştu: {str(e)}")
+        print(f"❌ Hata oluştu: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
